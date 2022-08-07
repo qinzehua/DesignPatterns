@@ -6,73 +6,6 @@ interface VirtualWalletBo {
 
 enum TransactionType { DEBIT, CREDIT, TRANSFER;}
 
-class VirtualWallet {
-  private id: number;
-  private createTime: number;
-  private balance: number;
-  private isAllowedOverdraft = true;
-  private overdrafAmount = 0;
-  private frozenAmount = 0;
-
-  constructor({id, createTime, balance}: VirtualWalletBo) {
-    this.id = id;
-    this.createTime = createTime;
-    this.balance = balance;
-  }
-
-  freeze(amount: number) {
-    this.frozenAmount += amount;
-  }
-
-  unfreeze(amount: number) {
-    this.frozenAmount -= amount;
-  }
-
-  increaseOverdrafAmount(amount: number) {
-    this.overdrafAmount += amount;
-  }
-
-  decreateOverdrafAmount(amount: number) {
-    this.overdrafAmount -= amount;
-  }
-
-  closeOverdraf() {
-    this.isAllowedOverdraft = false;
-  }
-
-  openOverdraf(){
-    this.isAllowedOverdraft = true;
-  }
-
-  getBalance(): number {
-    return this.balance;
-  }
-
-
-  getAvaliableBalance() {
-    let totalAvaliableBalance = this.balance - this.frozenAmount;
-
-    if(this.isAllowedOverdraft) {
-      totalAvaliableBalance += this.overdrafAmount
-    }
-    return totalAvaliableBalance
-  }
-
-  debit(amount: number): boolean {
-    const totalAvaliableBalance = this.getAvaliableBalance();
-    if(totalAvaliableBalance < 0) {
-      throw '余额不足'
-    }
-
-    this.balance -= amount;
-    return true
-  }
-
-  credit(amount: number): void {
-    this.balance += amount;
-  }
-}
-
 class VirtualWalletRepository {
   wallets: VirtualWalletBo[];
   constructor() {
@@ -95,8 +28,6 @@ class VirtualWalletRepository {
     })
   }
 }
-
-
 class VirtualWalletTransactionEntity {
     private id!: number;
     private createTime!: number;
@@ -151,33 +82,33 @@ class VirtualWallService {
 
   public debit(walletId: number, amount: number): void {
     const walletEntity = this.getVirtualWallet(walletId)
-    const wallet = new VirtualWallet(walletEntity)
-    wallet.debit(amount)
+    const balance = walletEntity.balance;
+    if(balance - amount < 0) {
+        throw new Error("余额不足")
+    }
     const transactionEntity = new VirtualWalletTransactionEntity()
     transactionEntity.setAmount(amount)
     transactionEntity.setCreateTime(+ new Date())
     transactionEntity.setType(TransactionType.DEBIT)
     transactionEntity.setFromWalletId(walletId)
     this.transactionRepo.saveTransaction(transactionEntity)
-    this.walltRepo.updateBalance(walletId, wallet.getBalance())
+    this.walltRepo.updateBalance(walletId, balance - amount)
   }
 
   public credit(walletId: number, amount: number): void {
     const walletEntity = this.getVirtualWallet(walletId)
-    const wallet = new VirtualWallet(walletEntity)
-    wallet.credit(amount)
+    const balance = walletEntity.balance;
+ 
     const transactionEntity = new VirtualWalletTransactionEntity()
     transactionEntity.setAmount(amount)
     transactionEntity.setCreateTime(+ new Date())
     transactionEntity.setType(TransactionType.CREDIT)
     transactionEntity.setFromWalletId(walletId)
     this.transactionRepo.saveTransaction(transactionEntity)
-    this.walltRepo.updateBalance(walletId, wallet.getBalance())
+    this.walltRepo.updateBalance(walletId, balance + amount)
   }
 
   public transfer(fromWalletId: number, toWalletId:number, amount: number): void {
-    this.debit(fromWalletId, amount)
-    this.credit(toWalletId, amount)
     const transactionEntity = new VirtualWalletTransactionEntity()
     transactionEntity.setAmount(amount)
     transactionEntity.setCreateTime(+ new Date())
@@ -185,6 +116,9 @@ class VirtualWallService {
     transactionEntity.setFromWalletId(fromWalletId)
     transactionEntity.setToWalletId(toWalletId)
     this.transactionRepo.saveTransaction(transactionEntity)
+    
+    this.debit(fromWalletId, amount)
+    this.credit(toWalletId, amount)
   }
 }
 
