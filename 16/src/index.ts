@@ -45,26 +45,106 @@ class Notification {
   }
   phoneCall(message: string): void {}
 }
+class ApiStatInfo {
+  private requestCount: number = 10;
+  private errorCount: number = 5;
+  timeoutCount: number = 6;
 
-class Alert {
-  constructor(private rule: AlertRule, private notification: Notification) {}
-  public check(
-    requestCount: number,
-    errorCount: number,
-    timeoutCount: number,
-    durationOfSeconds: number
-  ) {
-    const tps = requestCount / durationOfSeconds;
+  private durationOfSeconds: number = 2;
+
+  getRequestCount(): number {
+    return this.requestCount;
+  }
+  getErrorCount(): number {
+    return this.errorCount;
+  }
+  getTimeCount(): number {
+    return this.timeoutCount;
+  }
+  getDurationOfSeconds(): number {
+    return this.durationOfSeconds;
+  }
+}
+abstract class AlertHander {
+  constructor(
+    protected rule: AlertRule,
+    protected notification: Notification
+  ) {}
+  abstract check(apiStatInfo: ApiStatInfo): void;
+}
+
+class TpsHander extends AlertHander {
+  constructor(rule: AlertRule, notification: Notification) {
+    super(rule, notification);
+  }
+
+  check(apiStatInfo: ApiStatInfo) {
+    const tps =
+      apiStatInfo.getRequestCount() / apiStatInfo.getDurationOfSeconds();
     if (tps > this.rule.getMaxTps()) {
-      this.notification.notify(NotificationEmergencyLevel.URGENCY, "...");
-    }
-    if (errorCount > this.rule.getMaxErrorCount()) {
-      this.notification.notify(NotificationEmergencyLevel.SEVERE, "...");
-    }
-    const timeoutTps = timeoutCount / durationOfSeconds;
-    if (timeoutTps > this.rule.getMaxTimeoutTps()) {
       this.notification.notify(NotificationEmergencyLevel.URGENCY, "...");
     }
   }
 }
+
+class ErrorHander extends AlertHander {
+  constructor(rule: AlertRule, notification: Notification) {
+    super(rule, notification);
+  }
+
+  check(apiStatInfo: ApiStatInfo) {
+    const errors = apiStatInfo.getErrorCount();
+    if (errors > this.rule.getMaxTps()) {
+      this.notification.notify(NotificationEmergencyLevel.SEVERE, "...");
+    }
+  }
+}
+
+class TimeoutHander extends AlertHander {
+  constructor(rule: AlertRule, notification: Notification) {
+    super(rule, notification);
+  }
+
+  check(apiStatInfo: ApiStatInfo) {
+    const timeouts =
+      apiStatInfo.getTimeCount() / apiStatInfo.getDurationOfSeconds();
+    if (timeouts > this.rule.getMaxTps()) {
+      this.notification.notify(NotificationEmergencyLevel.URGENCY, "...");
+    }
+  }
+}
+
+class Alert {
+  handlers: AlertHander[] = [];
+  constructor() {}
+  addHandler(handler: AlertHander): void {
+    this.handlers.push(handler);
+  }
+  public check(apiStatInfo: ApiStatInfo) {
+    for (let handler of this.handlers) {
+      handler.check(apiStatInfo);
+    }
+  }
+}
+
+class ApiContext {
+  private alert!: Alert;
+  constructor() {
+    this.initialzeBeans();
+  }
+
+  initialzeBeans() {
+    this.alert = new Alert();
+    const alertRule = new AlertRule();
+    const notification = new Notification();
+    this.alert.addHandler(new TpsHander(alertRule, notification));
+    this.alert.addHandler(new ErrorHander(alertRule, notification));
+    this.alert.addHandler(new TimeoutHander(alertRule, notification));
+  }
+
+  getAlert(): Alert {
+    return this.alert;
+  }
+}
+
 export default {};
