@@ -109,69 +109,51 @@ class RequestStat {
 }
 // 统计数据
 class Aggregator {
-  aggrate(
-    reuestInfos: Map<string, RequestInf[]>,
-    durationInMills: number
-  ): Map<string, RequestStat> {
-    const status = new Map();
-    for (const [apiName, list] of reuestInfos) {
-      const stat: RequestStat = this.doAggrate(list, durationInMills);
-      status.set(apiName, stat);
-    }
-    return status;
-  }
-  doAggrate(requestInfos: RequestInf[], duraionTinMills: number): RequestStat {
-    const times: number[] = [];
+  static aggrate(
+    requestInfos: RequestInf[],
+    duraionTinMills: number
+  ): RequestStat {
+    let maxRespTime = 0;
+    let miniRespTime = 1000000000000;
+    let avgRespTime = 0;
+    let sumRespTime = 0;
+    let count = 0;
+
     for (const requesInfo of requestInfos) {
+      count++;
       const respTime = requesInfo.getResponseTime();
-      times.push(respTime);
+      if (maxRespTime < respTime) {
+        maxRespTime = respTime;
+      }
+
+      if (miniRespTime > respTime) {
+        miniRespTime = respTime;
+      }
+
+      sumRespTime += respTime;
     }
+
+    if (count !== 0) {
+      avgRespTime = sumRespTime / count;
+    }
+
     const requestStat = new RequestStat();
-    requestStat.setMaxRespTime(this.max(times));
-    requestStat.setMiniRespTime(this.min(times));
-    requestStat.setAvgRespTime(this.avg(times));
-    requestStat.setSumRespTime(this.sum(times));
-    requestStat.setCount(times.length);
+    requestStat.setMaxRespTime(maxRespTime);
+    requestStat.setMiniRespTime(miniRespTime);
+    requestStat.setAvgRespTime(avgRespTime);
+    requestStat.setSumRespTime(sumRespTime);
+    requestStat.setCount(count);
     return requestStat;
   }
-
-  private max(times: number[]): number {
-    let maxRespTime = 0;
-    times.forEach((time) => {
-      if (maxRespTime < time) {
-        maxRespTime = time;
-      }
-    });
-    return maxRespTime;
-  }
-  private min(times: number[]): number {
-    let miniRespTime = 1000000000000;
-    times.forEach((time) => {
-      if (miniRespTime > time) {
-        miniRespTime = time;
-      }
-    });
-    return miniRespTime;
-  }
-  private sum(times: number[]): number {
-    return times.reduce((prev, current) => prev + current, 0);
-  }
-  private avg(times: number[]): number {
-    return this.sum(times) / times.length;
-  }
-}
-
-interface StatViewer {
-  output(status: Map<string, RequestStat>): void;
 }
 
 //通过终端输出信息
 
-class ConsoleReporter implements StatViewer {
-  constructor(
-    private metricsStorage: MetricsStorage,
-    private aggregator: Aggregator
-  ) {}
+class ConsoleReporter {
+  private metricsStorage!: MetricsStorage;
+  constructor(metricsStorage: MetricsStorage) {
+    this.metricsStorage = metricsStorage;
+  }
 
   startRepeatReport(periodInSeconds: number, durationInSeconds: number) {
     const durationInMills = durationInSeconds * 1000;
@@ -181,22 +163,24 @@ class ConsoleReporter implements StatViewer {
       startTimeInMillis,
       endTimeInMillis
     );
-    const status = this.aggregator.aggrate(reuestInfos, durationInSeconds);
-    this.output(status);
-  }
 
-  output(status: Map<string, RequestStat>) {
+    const status = new Map();
+    for (const [apiName, list] of reuestInfos) {
+      const stat: RequestStat = Aggregator.aggrate(list, durationInMills);
+      status.set(apiName, stat);
+    }
+
     console.log(status);
   }
 }
 
 // 邮件
-class EmailReporter implements StatViewer {
+class EmailReporter {
   private DAY_HOURS_IN_SECONDS = 86400;
-  constructor(
-    private metricsStorage: MetricsStorage,
-    private aggregator: Aggregator
-  ) {}
+  private metricsStorage!: MetricsStorage;
+  constructor(metricsStorage: MetricsStorage) {
+    this.metricsStorage = metricsStorage;
+  }
 
   startDailyReport() {
     const durationInMills = this.DAY_HOURS_IN_SECONDS * 1000;
@@ -206,10 +190,13 @@ class EmailReporter implements StatViewer {
       startTimeInMillis,
       endTimeInMillis
     );
-    const status = this.aggregator.aggrate(reuestInfos, durationInMills);
-    this.output(status);
-  }
-  output(status: Map<string, RequestStat>) {
+
+    const status = new Map();
+    for (const [apiName, list] of reuestInfos) {
+      const stat: RequestStat = Aggregator.aggrate(list, durationInMills);
+      status.set(apiName, stat);
+    }
+
     console.log(status);
   }
 }
@@ -217,11 +204,10 @@ class EmailReporter implements StatViewer {
 class Demo {
   static main() {
     const storage = new RedisStorage();
-    const aggregator = new Aggregator();
-    const consoleReporter = new ConsoleReporter(storage, aggregator);
+    const consoleReporter = new ConsoleReporter(storage);
     consoleReporter.startRepeatReport(60, 60);
 
-    const emailReporter = new EmailReporter(storage, aggregator);
+    const emailReporter = new EmailReporter(storage);
     emailReporter.startDailyReport();
 
     const collector = new MetricsCollector(storage);
@@ -233,3 +219,5 @@ class Demo {
     collector.recordRequest(new RequestInf("login", 112, 12312));
   }
 }
+
+export default {};
