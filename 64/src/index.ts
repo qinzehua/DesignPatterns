@@ -1,3 +1,5 @@
+// 分支逻辑法
+
 enum State {
   SMALL = 0,
   SUPER,
@@ -54,3 +56,5 @@ class MarioStateMachine {
     }
   }
 }
+
+export default {};
