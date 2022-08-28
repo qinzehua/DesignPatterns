@@ -17,9 +17,12 @@ class ArrayIterator<T> implements Iterators<T> {
   }
 
   hasNext(): boolean {
-    return !!this.arrayLlist[this.cursor + 1];
+    return this.cursor >= this.arrayLlist.length;
   }
   currentItem(): T {
+    if(this.cursor >= this.arrayLlist.length) {
+      throw new Error('遍历结束')
+    }
     return this.arrayLlist[this.cursor]!;
   }
 }
